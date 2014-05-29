@@ -53,13 +53,16 @@ can be located using your favorite search engine.)  Unfortunately, I do not
 have time to provide unpaid support for everyone who uses this code.  
 
                                              -- Paul Kocher
+
+
+Modified by Alessandro Renzi (alessandro.renzi@about.me) for multithread implementation
 */
 
 
 #include <stdint.h>
 #include "blowfish.h"
 
-#define N               16
+#define N 16
 
 static const uint32_t ORIG_P[16 + 2] = {
         0x243F6A88, 0x85A308D3, 0x13198A2E, 0x03707344,
@@ -348,6 +351,16 @@ static uint32_t F(BLOWFISH_CTX *ctx, uint32_t x) {
 }
 
 
+/**
+ * @brief Blowfish encription
+ * 
+ * Old exposed API in which the input is splitted in two
+ * 
+ * @param ctx [in] Current context
+ * @param xl [in,out] Left half input (data is overwritten)
+ * @param xr [in,out] Right half input (data is overwritten)
+ * @see BlowfishEncryption()
+ */
 void Blowfish_Encrypt(BLOWFISH_CTX *ctx, uint32_t *xl, uint32_t *xr){
   uint32_t  Xl;
   uint32_t  Xr;
@@ -378,6 +391,16 @@ void Blowfish_Encrypt(BLOWFISH_CTX *ctx, uint32_t *xl, uint32_t *xr){
 }
 
 
+/**
+ * @brief Blowfish decription
+ * 
+ * Old exposed API in which the input is splitted in two.
+ * 
+ * @param ctx [in] Current context
+ * @param xl [in,out] Left half input (data is overwritten)
+ * @param xr [in,out] Right half input (data is overwritten)
+ * @see BlowfishDecryption()
+ */
 void Blowfish_Decrypt(BLOWFISH_CTX *ctx, uint32_t *xl, uint32_t *xr){
   uint32_t  Xl;
   uint32_t  Xr;
@@ -410,6 +433,15 @@ void Blowfish_Decrypt(BLOWFISH_CTX *ctx, uint32_t *xl, uint32_t *xr){
 }
 
 
+/**
+ * @brief Context initialization
+ * 
+ * Must be run only once before encryption or decryption.
+ * 
+ * @param ctx [out] Pointer to context to be initialized
+ * @param key [in] Key string
+ * @param keyLen [in] Key string length
+ */
 void Blowfish_Init(BLOWFISH_CTX *ctx, unsigned char *key, int keyLen) {
   int i, j, k;
   uint32_t data, datal, datar;
@@ -447,6 +479,42 @@ void Blowfish_Init(BLOWFISH_CTX *ctx, unsigned char *key, int keyLen) {
       ctx->S[i][j + 1] = datar;
     }
   }
+}
+
+
+/**
+ * @brief Blowfish encription
+ * 
+ * @param ctx [in] Current context
+ * @param x [in] 64 bits block to be encrypted
+ * @return 64 bits encrypted block
+ */
+uint64_t BlowfishEncryption(BLOWFISH_CTX *ctx, uint64_t x)
+{
+	uint32_t L = (x>>32);
+	uint32_t R = (uint32_t)(x & 0x0000FFFF);
+	
+	Blowfish_Encrypt(ctx, &L, &R);
+	
+	return (uint64_t)((L<<32) | R);
+}
+
+
+/**
+ * @brief Blowfish decription
+ * 
+ * @param ctx [in] Current context
+ * @param x [in] 64 bits block to be decrypted
+ * @return 64 bits decrypted block
+ */
+uint64_t BlowfishDecryption(BLOWFISH_CTX *ctx, uint64_t x)
+{
+	uint32_t L = (x>>32);
+	uint32_t R = (uint32_t)(x & 0x0000FFFF);
+	
+	Blowfish_Decrypt(ctx, &L, &R);
+	
+	return (uint64_t)((L<<32) | R);
 }
 
 
