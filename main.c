@@ -8,6 +8,61 @@
 
 
 
+char mode;
+int max_threads;
+long int input_file_length;
+long int block_size;
+
+FILE *input_file;
+FILE *key_file;
+FILE *output_file;
+
+BLOWFISH_CTX *ctx;
+
+pthread_mutex_t read_mutex;
+pthread_mutex_t write_mutex;
+
+
+/**
+ * @brief Blowfish thread function
+ * 
+ * @param args Block number
+ */
+void *Blowfish_thread(void *args)
+{
+	int block_number = *((int *)args);
+	long int base = block_size * block_number;
+	long int offset = 0;
+	
+	uint64_t in_data = 0;
+	uint64_t out_data = 0;
+	
+	for(offset = 0; offset<block_size; offset += 8)
+	{
+		pthread_mutex_lock(&read_mutex);
+			fseek(input_file, base+offset, SEEK_SET);
+			fread(&in_data, 8, 1, input_file);
+		pthread_mutex_unlock(&read_mutex);
+		
+		if(mode == 'e')
+		{
+			out_data = BlowfishEncryption(ctx, in_data);
+		}
+		else
+		{
+			out_data = BlowfishDecryption(ctx, in_data);
+		}
+		
+		pthread_mutex_lock(&write_mutex);
+			fseek(output_file, base+offset, SEEK_SET);
+			fwrite(&out_data, 8, block_number, output_file);
+			//TODO: ferror() to check for writing errors
+		pthread_mutex_unlock(&write_mutex);
+	}
+	
+	pthread_exit(NULL);
+}
+
 
 
 /**
@@ -15,7 +70,6 @@
  * 
  * @param argc Argument count.
  * @param argv Argument vector.
- * @return int
  */
 int main(int argc, char **argv) 
 {
@@ -42,11 +96,11 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	
-	char mode = argv[1][0];
+	mode = argv[1][0];
 	char *input_filename = argv[2];
 	char *key_filename = argv[3];
 	char *output_filename = argv[4];
-	int max_threads = atoi(argv[5]);
+	max_threads = atoi(argv[5]);
 	
 	if((mode != 'e')&&(mode != 'd'))
 	{
@@ -61,9 +115,6 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	
-	FILE *input_file;
-	FILE *key_file;
-	FILE *output_file;
 	
 	input_file = fopen(input_filename, "r");
 	if(input_file == NULL)
@@ -110,14 +161,16 @@ int main(int argc, char **argv)
 	char key[key_file_length];
 	fscanf(key_file, "%s", key);
 	
+	//TODO: Create context
+	//TODO: Test if could be usefull perform this step in a separate thread
+	
 	
 	
 	///////////////////////////////////////////////////////////////////////
 	// Block subdivision
 	///////////////////////////////////////////////////////////////////////
 	
-	int block_number = 0;
-	int input_file_length = 0;
+	input_file_length = 0;
 	
 	fseek(input_file, 0L, SEEK_END);		// Go to file end
 	input_file_length = ftell(input_file);	// Get the length
@@ -129,116 +182,54 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	
-	block_number = (int)(((float)input_file_length/8) + 0.9); // Cannot sum 1 because if input_file_length is divisible by 8 nothing have to be summed
-	
-	//uint8_t block_pool[block_number][8];
-	uint8_t **block_pool = (uint8_t **) malloc(block_number * sizeof(uint8_t *));
-	int i = 0;
-	for(i = 0; i < block_number; i++)
+	block_size = input_file_length / max_threads;
+	if(0 != (block_size%8))
 	{
-		block_pool[i] = (uint8_t *) malloc(8 * sizeof(uint8_t));
+		// Make the block size multiple of 64 bits
+		block_size -= (block_size%8);
 	}
-	
-	
-	uint8_t temp = 0;
-	
-	for(i = 0; i < block_number; i++)
-	{
-		for(c = 0; (c < 8) && !feof(input_file); c++)
-		{
-			fread(&block_pool[i][c], 1, 1, input_file);
-		}
-	}
-	
-	if(feof(input_file))
-	{
-		c--;	// Remove the EOF
-	}
-	
-	for(; c < 8; c++)
-	{
-		block_pool[block_number-1][c] = ' ';	// Padding
-	}
-	
-	
+	long int reminder_size = block_size * max_threads;
 	
 	
 	///////////////////////////////////////////////////////////////////////
 	// Thread creation
 	///////////////////////////////////////////////////////////////////////
 	
-	//pthread_t thread_pool[block_number];
-	pthread_t *thread_pool = (pthread_t *) malloc(block_number * sizeof(pthread_t));
+	//pthread_t thread_pool[max_threads];
+	pthread_t *thread_pool = (pthread_t *) malloc(max_threads * sizeof(pthread_t));
 	
-	//Des_args args_pool[block_number];
-	Des_args *args_pool = (Des_args *) malloc(block_number * sizeof(Des_args));
 	
-	//uint8_t output_pool_binary[block_number][64];
-	uint8_t **output_pool_binary = (uint8_t **) malloc(block_number * sizeof(uint8_t *));
-	for(i = 0; i < block_number; i++)
-	{
-		output_pool_binary[i] = (uint8_t *) malloc(64 * sizeof(uint8_t));
-	}
-	
-	for(i = 0; i < block_number; i++)
-	{
-		args_pool[i].input = block_pool_binary[i];
-		args_pool[i].key = key_binary;
-		args_pool[i].output = output_pool_binary[i];
-	}
 	
 	////////////////
 	// Benchmark
 		clock_t start = clock();
 	////////////////
+	//TODO: Move benchmark marker
 	
-	pthread_mutex_init(&mutex, NULL);
-	int temp_running_thread;
-	running_thread = 0;
+	pthread_mutex_init(&read_mutex, NULL);
+	pthread_mutex_init(&write_mutex, NULL);
+	
+
 	
 	for(i = 0; i < block_number; i++)
 	{
 		int result;
-		if(mode == 'e')
-		{
-			pthread_mutex_lock(&mutex);
-			running_thread++;
-			pthread_mutex_unlock(&mutex);
-			result = pthread_create(&thread_pool[i], NULL, DES_enc, (void *)(&args_pool[i]));
-		}
-		else
-		{
-			pthread_mutex_lock(&mutex);
-			running_thread++;
-			pthread_mutex_unlock(&mutex);
-			result = pthread_create(&thread_pool[i], NULL, DES_dec, (void *)(&args_pool[i]));
-		}
+		
+// 		pthread_mutex_lock(&mutex);
+// 		running_thread++;
+// 		pthread_mutex_unlock(&mutex);
+// 		result = pthread_create(&thread_pool[i], NULL, DES_enc, (void *)(&args_pool[i]));
 		
 		if(result != 0)
 		{
 			perror("Thread creation error\n");
 			exit(EXIT_FAILURE);
 		}
-		
-		pthread_mutex_lock(&mutex);
-		temp_running_thread = running_thread;
-		pthread_mutex_unlock(&mutex);
-		
-		while(temp_running_thread >= max_threads)
-		{
-			pthread_mutex_lock(&mutex);
-			temp_running_thread = running_thread;
-			pthread_mutex_unlock(&mutex);
-		}
 	}
 	
-	while(temp_running_thread > 0)
-	{
-		pthread_mutex_lock(&mutex);
-		temp_running_thread = running_thread;
-		pthread_mutex_unlock(&mutex);
-	}
 	
+	
+	//TODO: Implement reminder
 	
 	////////////////
 	// Benchmark
@@ -246,42 +237,12 @@ int main(int argc, char **argv)
 		unsigned long milliseconds = (stop - start) * 1000 / CLOCKS_PER_SEC;
 		printf("Elapsed time: %lu ms.\n\n", milliseconds);
 	////////////////
-	
-	
-	
-	///////////////////////////////////////////////////////////////////////
-	// Output binary renconstruction
-	///////////////////////////////////////////////////////////////////////
-	
-	uint8_t output_pool[block_number][8];
-	
-	for(i = 0; i < block_number; i++)
-	{
-		for(c = 0; c < 8; c++)
-		{
-			output_pool[i][c] = 0;
-		}
-	}
-	
-	for(i = 0; i < block_number; i++)
-	{
-		for(c = 0; c < 64; c++)
-		{
-			output_pool[i][c/8] |= ( output_pool_binary[i][c] << (7 - (c%8)) );
-		}
-	}
+	//TODO: Move benchmark marker
 	
 	
 	
 	
-	///////////////////////////////////////////////////////////////////////
-	// Output file writing
-	///////////////////////////////////////////////////////////////////////
 	
-	fwrite(output_pool, 8, block_number, output_file);
-	//putc(EOF, output_file);
-	
-	//TODO: ferror() to check for writing errors
 	
 	///////////////////////////////////////////////////////////////////////
 	// Memory free
@@ -289,16 +250,16 @@ int main(int argc, char **argv)
 	
 	for(i = 0; i < block_number; i++)
 	{
-		free(block_pool[i]);
-		free(block_pool_binary[i]);
-		free(output_pool_binary[i]);
+// 		free(block_pool[i]);
+// 		free(block_pool_binary[i]);
+// 		free(output_pool_binary[i]);
 	}
-	free(block_pool);
-	free(block_pool_binary);
-	free(output_pool_binary);
-	free(key_binary);
+// 	free(block_pool);
+// 	free(block_pool_binary);
+// 	free(output_pool_binary);
+// 	free(key_binary);
 	free(thread_pool);	
-	free(args_pool);
+// 	free(args_pool);
 	
 	fcloseall();	// Close all files
 	
