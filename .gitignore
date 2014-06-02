@@ -24,3 +24,5 @@
 
 # Project
 *.kdev4
+
+*.directory
