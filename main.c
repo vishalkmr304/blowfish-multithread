@@ -4,7 +4,10 @@
 #include <pthread.h>
 #include <errno.h>
 #include <time.h>
+#include <string.h>	// for memset()
 #include "blowfish.h"
+
+#define BENCHMARK
 
 
 
@@ -65,6 +68,8 @@ void *Blowfish_thread(void *args)
 		pthread_mutex_unlock(&write_mutex);
 	}
 	
+	in_data = 0;
+	out_data = 0;
 	pthread_exit(NULL);
 }
 
@@ -142,8 +147,10 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	
-	
-	
+
+#ifdef BENCHMARK
+	clock_t start = clock();
+#endif	
 	
 	
 	///////////////////////////////////////////////////////////////////////
@@ -208,6 +215,8 @@ int main(int argc, char **argv)
 	//pthread_t thread_pool[max_threads];
 	pthread_t *thread_pool = (pthread_t *) malloc(max_threads * sizeof(pthread_t));
 	thread_args = (int *) malloc(max_threads * sizeof(int));
+	pthread_mutex_init(&read_mutex, NULL);
+	pthread_mutex_init(&write_mutex, NULL);
 	
 	int i = 0;
 	for(i = 0; i < max_threads; ++i)
@@ -215,23 +224,9 @@ int main(int argc, char **argv)
 		thread_args[i] = i;
 	}
 	
-	
-	////////////////
-	// Benchmark
-		clock_t start = clock();
-	////////////////
-	//TODO: Move benchmark marker
-	//TODO: implement it as a compile flag
-	
-	pthread_mutex_init(&read_mutex, NULL);
-	pthread_mutex_init(&write_mutex, NULL);
-	
-
-	
 	for(i = 0; i < max_threads; i++)
 	{
 		int result;
-		//TODO: Start threads
 		result = pthread_create(&thread_pool[i], NULL, Blowfish_thread, (void *)(&thread_args[i]));
 		
 		if(result != 0)
@@ -278,7 +273,20 @@ int main(int argc, char **argv)
 	}
 	
 	
+	///////////////////////////////////////////////////////////////////////
+	// Threads Rendez-vous
+	///////////////////////////////////////////////////////////////////////
+	int j = 0;
+	for(j = 0; j < max_threads; ++j)
+	{
+		pthread_join(thread_pool[j], NULL);
+	}
 	
+	
+	
+	///////////////////////////////////////////////////////////////////////
+	// Padding
+	///////////////////////////////////////////////////////////////////////
 	if(mode == 'e')
 	{
 		pthread_mutex_lock(&read_mutex);
@@ -286,7 +294,6 @@ int main(int argc, char **argv)
 			fread(&in_data_rem, reminder_size-reminder_size_alligned, 1, input_file);
 		pthread_mutex_unlock(&read_mutex);
 		
-		int j = 0;
 		for(j = 0; j < padding_size; ++j)
 		{
 			in_data_rem = (in_data_rem<<8) || (uint8_t)padding_size;
@@ -306,23 +313,20 @@ int main(int argc, char **argv)
 	}
 	else
 	{
+		// Last bytes already decrypted along with the padding which have to be trimmed, its length is written as padding data (at most 8 byte)
 		unsigned int trim_len = out_data_rem & (uint64_t)0xFF;
 		ftruncate(output_file, input_file_length-trim_len);
 	}
 	
 	
 	
-	//TODO: join threads
 	
 	
-	////////////////
-	// Benchmark
-		clock_t stop = clock();
-		unsigned long milliseconds = (stop - start) * 1000 / CLOCKS_PER_SEC;
-		printf("Elapsed time: %lu ms.\n\n", milliseconds);
-	////////////////
-	//TODO: Move benchmark marker
-	
+#ifdef BENCHMARK
+	clock_t stop = clock();
+	unsigned long milliseconds = (stop - start) * 1000 / CLOCKS_PER_SEC;
+	printf("Elapsed time: %lu ms.\n\n", milliseconds);
+#endif
 	
 	
 	
@@ -332,18 +336,21 @@ int main(int argc, char **argv)
 	// Memory free
 	///////////////////////////////////////////////////////////////////////
 	
-	for(i = 0; i < block_number; i++)
-	{
-// 		free(block_pool[i]);
-// 		free(block_pool_binary[i]);
-// 		free(output_pool_binary[i]);
-	}
-// 	free(block_pool);
-// 	free(block_pool_binary);
-// 	free(output_pool_binary);
-// 	free(key_binary);
-	free(thread_pool);	
-// 	free(args_pool);
+	free(thread_pool);
+	free(thread_args);
+	
+	pthread_mutex_destroy(&read_mutex);
+	pthread_mutex_destroy(&write_mutex);
+	
+	ctx = memset(ctx, 0, sizeof(BLOWFISH_CTX));
+	key = memset(key, 0, key_file_length);
+	in_data_rem = 0;
+	out_data_rem = 0;
+	input_file_length = 0;
+	key_file_length = 0;
+	block_size = 0;
+	reminder_size = 0;
+	reminder_size_alligned = 0;
 	
 	fcloseall();	// Close all files
 	
