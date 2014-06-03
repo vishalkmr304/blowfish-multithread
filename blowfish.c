@@ -516,7 +516,7 @@ uint64_t BlowfishEncryption(BLOWFISH_CTX *ctx, uint64_t x)
 	
 	Blowfish_Encrypt(ctx, &L, &R);
 	
-	return (uint64_t)((L<<32) | R);
+	return ((uint64_t)L<<32) | R;
 }
 
 
@@ -534,7 +534,7 @@ uint64_t BlowfishDecryption(BLOWFISH_CTX *ctx, uint64_t x)
 	
 	Blowfish_Decrypt(ctx, &L, &R);
 	
-	return (uint64_t)((L<<32) | R);
+	return ((uint64_t)L<<32) | R;
 }
 
 
