@@ -18,7 +18,6 @@ long int input_file_length;
 long int block_size;
 
 FILE *input_file;
-FILE *key_file;
 FILE *output_file;
 
 BLOWFISH_CTX *ctx;
@@ -76,7 +75,7 @@ void *Blowfish_thread(void *args)
 
 
 /**
- * @brief Usage: blowfish-multithread (e|d) input_filename key_filename output_filename max_threads
+ * @brief Usage: blowfish-multithread (e|d) input_filename key output_filename max_threads
  * 
  * @param argc Argument count.
  * @param argv Argument vector.
@@ -96,7 +95,7 @@ int main(int argc, char **argv)
 			printf("%s",argv[q]);
 			printf("\n");
 		}
-		perror("Usage: blowfish-multithread (e|d) input_filename key_filename output_filename max_threads\n");
+		perror("Usage: blowfish-multithread (e|d) input_filename key output_filename max_threads\n");
 		exit(EXIT_FAILURE);
 	}
 	
@@ -108,7 +107,7 @@ int main(int argc, char **argv)
 	
 	mode = argv[1][0];
 	char *input_filename = argv[2];
-	char *key_filename = argv[3];
+	char *key = argv[3];
 	char *output_filename = argv[4];
 	max_threads = atoi(argv[5]);
 	
@@ -133,13 +132,6 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	
-	key_file = fopen(key_filename, "r");
-	if(key_file == NULL)
-	{
-		perror("Problem opening the key file\n");
-		exit(EXIT_FAILURE);
-	}
-	
 	output_file = fopen(output_filename, "w+");	// Overwrite existing file
 	if(output_file == NULL)
 	{
@@ -157,23 +149,16 @@ int main(int argc, char **argv)
 	// Key reading
 	///////////////////////////////////////////////////////////////////////
 	
-	int key_file_length = 0;
+	int key_length = strlen(key);	// Go back to the beginning
 	
-	fseek(key_file, 0L, SEEK_END);		// Go to file end
-	key_file_length = ftell(key_file);	// Get the length
-	rewind(key_file);					// Go back to the beginning
-	
-	if((key_file_length<4) || (key_file_length>56))
+	if((key_length<4) || (key_length>56))
 	{
 		// Out of 32-448 bits range
 		perror("Wrong key size (4-56 characters)\n");
 		exit(EXIT_FAILURE);
 	}
 	
-	char key[key_file_length];
-	fscanf(key_file, "%s", key);
-	
-	Blowfish_Init(ctx, key, key_file_length);
+	Blowfish_Init(ctx, key, key_length);
 	//TODO: Test if could be usefull perform this step in a separate thread
 	
 	
@@ -343,11 +328,10 @@ int main(int argc, char **argv)
 	pthread_mutex_destroy(&write_mutex);
 	
 	ctx = memset(ctx, 0, sizeof(BLOWFISH_CTX));
-	key = memset(key, 0, key_file_length);
 	in_data_rem = 0;
 	out_data_rem = 0;
 	input_file_length = 0;
-	key_file_length = 0;
+	key_length = 0;
 	block_size = 0;
 	reminder_size = 0;
 	reminder_size_alligned = 0;
