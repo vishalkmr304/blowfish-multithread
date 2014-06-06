@@ -18,6 +18,9 @@ int max_threads;
 int *thread_args;
 long int input_file_length;
 long int block_size;
+int frame_number;
+int frame_size;
+const int frame_threshold = 700000;
 
 FILE *input_file;
 FILE *output_file;
@@ -27,6 +30,8 @@ BLOWFISH_CTX *ctx;
 pthread_mutex_t read_mutex;
 pthread_mutex_t write_mutex;
 
+
+inline void compute_frame_parameters(void);
 
 /**
  * @brief Blowfish thread function
@@ -184,7 +189,6 @@ int main(int argc, char **argv)
 		perror("Input file is too short\n");
 		exit(EXIT_FAILURE);
 	}
-
 	
 	block_size = input_file_length / max_threads;
 	if(0 != (block_size%8))
@@ -195,6 +199,8 @@ int main(int argc, char **argv)
 	long int reminder_size = input_file_length - (block_size * max_threads);
 	long int reminder_size_alligned = reminder_size - (reminder_size%8);
 	int padding_size = 8 - (reminder_size%8);
+	
+	compute_frame_parameters();
 	
 #ifdef DEBUG
 		printf("Block subdivision: input_file_length=%d\tblock_size=%d\nreminder_size=%d\treminder_size_alligned=%d\tpadding_size=%d\n\n", input_file_length, block_size, reminder_size, reminder_size_alligned, padding_size);
@@ -378,6 +384,17 @@ int main(int argc, char **argv)
 }
 
 
-
+/**
+ * @brief Compute optimal frame number and size
+ */
+inline void compute_frame_parameters(void)
+{
+	frame_size = block_size;
+	frame_number = 0;
+	for(frame_number = 1; frame_size < frame_threshold; ++i)
+	{
+		frame_size /= 8*frame_number;	// Maintain frame_size multiple of 8 (block_size already is)
+	}
+}
 
 
