@@ -4,8 +4,10 @@
 #include <pthread.h>
 #include <errno.h>
 #include <time.h>
+#include <unistd.h>	// for truncate()
 #include <string.h>	// for memset()
 #include "blowfish.h"
+#include "debug.h"
 
 #define BENCHMARK
 
@@ -44,7 +46,10 @@ void *Blowfish_thread(void *args)
 	{
 		pthread_mutex_lock(&read_mutex);
 			fseek(input_file, base+offset, SEEK_SET);
-			fread(&in_data, 8, 1, input_file);
+			fread(&in_data, 1, 8, input_file);
+#ifdef DEBUG
+			printf("Thread read: base=%d\toffset=%d\tin_data=%08llX\n", base, offset, in_data);
+#endif
 		pthread_mutex_unlock(&read_mutex);
 		
 		if(mode == 'e')
@@ -58,7 +63,7 @@ void *Blowfish_thread(void *args)
 		
 		pthread_mutex_lock(&write_mutex);
 			fseek(output_file, base+offset, SEEK_SET);
-			fwrite(&out_data, 8, 1, output_file);
+			fwrite(&out_data, 1, 8, output_file);
 			if(ferror(output_file))
 			{
 				perror("Writing error\n");
@@ -158,6 +163,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	
+	ctx = (BLOWFISH_CTX *) malloc(sizeof(BLOWFISH_CTX));
 	Blowfish_Init(ctx, key, key_length);
 	//TODO: Test if could be usefull perform this step in a separate thread
 	
@@ -186,9 +192,13 @@ int main(int argc, char **argv)
 		// Make the block size multiple of 64 bits
 		block_size -= (block_size%8);
 	}
-	long int reminder_size = (block_size * max_threads) - input_file_length;
+	long int reminder_size = input_file_length - (block_size * max_threads);
 	long int reminder_size_alligned = reminder_size - (reminder_size%8);
 	int padding_size = 8 - (reminder_size%8);
+	
+#ifdef DEBUG
+		printf("Block subdivision: input_file_length=%d\tblock_size=%d\nreminder_size=%d\treminder_size_alligned=%d\tpadding_size=%d\n\n", input_file_length, block_size, reminder_size, reminder_size_alligned, padding_size);
+#endif
 	
 	
 	
@@ -244,6 +254,9 @@ int main(int argc, char **argv)
 		else
 		{
 			out_data_rem = BlowfishDecryption(ctx, in_data_rem);
+#ifdef TRACE
+			printf("Reminder_dec: i=%d\tout_data_rem=%08llX\twrite at: %d\n", i, out_data_rem, base_rem+i);
+#endif
 		}
 		
 		pthread_mutex_lock(&write_mutex);
@@ -274,33 +287,51 @@ int main(int argc, char **argv)
 	///////////////////////////////////////////////////////////////////////
 	if(mode == 'e')
 	{
-		pthread_mutex_lock(&read_mutex);
-			fseek(input_file, base_rem+i, SEEK_SET);
-			fread(&in_data_rem, reminder_size-reminder_size_alligned, 1, input_file);
-		pthread_mutex_unlock(&read_mutex);
+		fseek(input_file, base_rem+i, SEEK_SET);
+		fread(&in_data_rem, reminder_size-reminder_size_alligned, 1, input_file);
 		
-		for(j = 0; j < padding_size; ++j)
+#ifdef TRACE
+		printf("Padding_enc: in_data_rem=%08llX\n", in_data_rem);
+#endif
+		
+		for(j = reminder_size-reminder_size_alligned; j < 8; ++j)
 		{
-			in_data_rem = (in_data_rem<<8) || (uint8_t)padding_size;
+			in_data_rem = in_data_rem & ~( (uint64_t)(0xFF) << 8*j);
+#ifdef TRACE
+			printf("Padding_enc: in_data_rem=%08llX\tj+1=%d\t~( (0xFF) << 8*j)=%08llX\n", in_data_rem, j+1, ~( (uint64_t)(0xFF) << 8*j));
+#endif
+		}
+		
+		for(j = reminder_size-reminder_size_alligned; j < 8; ++j)
+		{
+			in_data_rem = in_data_rem | ( ((uint64_t)padding_size) << 8*j);
+#ifdef TRACE
+			printf("Padding_enc: in_data_rem=%08llX\tj+1=%d\t((uint64_t)padding_size) << 8*(j+1))=%08llX\n", in_data_rem, j+1, ((uint64_t)padding_size) << 8*(j+1));
+#endif
 		}
 		
 		out_data_rem = BlowfishEncryption(ctx, in_data_rem);
 		
-		pthread_mutex_lock(&write_mutex);
-			fseek(output_file, base_rem+i, SEEK_SET);
-			fwrite(&out_data_rem, 8, 1, output_file);
-			if(ferror(output_file))
-			{
-				perror("Writing error\n");
-				exit(EXIT_FAILURE);
-			}
-		pthread_mutex_unlock(&write_mutex);
+		fseek(output_file, base_rem+i, SEEK_SET);
+		fwrite(&out_data_rem, 1, 8, output_file);
+		if(ferror(output_file))
+		{
+			perror("Writing error\n");
+			exit(EXIT_FAILURE);
+		}
 	}
 	else
 	{
-		// Last bytes already decrypted along with the padding which have to be trimmed, its length is written as padding data (at most 8 byte)
+		// Last 8 bytes already decrypted  along with the padding which have to be trimmed, its length is written as padding data (at most 8 byte)
+		fseek(output_file, input_file_length-1, SEEK_SET);
+		fread(&out_data_rem, 1, 1, output_file);
+		
 		unsigned int trim_len = out_data_rem & (uint64_t)0xFF;
-		ftruncate(output_file, input_file_length-trim_len);
+		fclose(output_file);
+		truncate(output_filename, input_file_length-trim_len);
+#ifdef DEBUG
+		printf("Trimming: out_data_rem=%08lX\tinput_file_length-trim_len=%d\n", out_data_rem, input_file_length-trim_len);
+#endif
 	}
 	
 	

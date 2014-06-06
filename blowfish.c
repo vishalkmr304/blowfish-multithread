@@ -46,8 +46,13 @@ Modified by Alessandro Renzi (alessandro.renzi@about.me) for multithread impleme
 
 #include <stdint.h>
 #include "blowfish.h"
+#include "debug.h"
 
 #define N 16
+
+#ifdef TRACE
+	#include <stdio.h>
+#endif
 
 static const uint32_t ORIG_P[16 + 2] = {
         0x243F6A88, 0x85A308D3, 0x13198A2E, 0x03707344,
@@ -360,6 +365,10 @@ void Blowfish_Encrypt(BLOWFISH_CTX *ctx, uint32_t *xl, uint32_t *xr){
 
 	Xl = *xl;
 	Xr = *xr;
+	
+#ifdef TRACE
+	printf("Enc 1: Xl = %08lX\tXr = %08lX\n", Xl, Xr);
+#endif
 
 	for (i = 0; i < N; ++i) 
 	{
@@ -369,11 +378,19 @@ void Blowfish_Encrypt(BLOWFISH_CTX *ctx, uint32_t *xl, uint32_t *xr){
 		temp = Xl;
 		Xl = Xr;
 		Xr = temp;
+		
+#ifdef TRACE
+		printf("Enc 2: Xl = %08lX\tXr = %08lX\n", Xl, Xr);
+#endif
 	}
 
 	temp = Xl;
 	Xl = Xr;
 	Xr = temp;
+	
+#ifdef TRACE
+	printf("Enc 3: Xl = %08lX\tXr = %08lX\n", Xl, Xr);
+#endif
 
 	Xr = Xr ^ ctx->P[N];
 	Xl = Xl ^ ctx->P[N + 1];
@@ -381,6 +398,9 @@ void Blowfish_Encrypt(BLOWFISH_CTX *ctx, uint32_t *xl, uint32_t *xr){
 	*xl = Xl;
 	*xr = Xr;
 	
+#ifdef TRACE
+	printf("Enc 4: *xl = %08lX\t*xr = %08lX\n", *xl, *xr);
+#endif
 	
 	// Clean temp data for security reasons
 	Xl = 0;
@@ -408,6 +428,10 @@ void Blowfish_Decrypt(BLOWFISH_CTX *ctx, uint32_t *xl, uint32_t *xr){
 
 	Xl = *xl;
 	Xr = *xr;
+	
+#ifdef TRACE
+	printf("Dec 1: Xl = %08lX\tXr = %08lX\n", Xl, Xr);
+#endif
 
 	for (i = N + 1; i > 1; --i) 
 	{
@@ -418,12 +442,20 @@ void Blowfish_Decrypt(BLOWFISH_CTX *ctx, uint32_t *xl, uint32_t *xr){
 		temp = Xl;
 		Xl = Xr;
 		Xr = temp;
+		
+#ifdef TRACE
+		printf("Dec 2: Xl = %08lX\tXr = %08lX\n", Xl, Xr);
+#endif
 	}
 
 	/* Exchange Xl and Xr */
 	temp = Xl;
 	Xl = Xr;
 	Xr = temp;
+	
+#ifdef TRACE
+	printf("Dec 3: Xl = %08lX\tXr = %08lX\n", Xl, Xr);
+#endif
 
 	Xr = Xr ^ ctx->P[1];
 	Xl = Xl ^ ctx->P[0];
@@ -431,6 +463,9 @@ void Blowfish_Decrypt(BLOWFISH_CTX *ctx, uint32_t *xl, uint32_t *xr){
 	*xl = Xl;
 	*xr = Xr;
 	
+#ifdef TRACE
+	printf("Dec 4: *xl = %08lX\t*xr = %08lX\n", *xl, *xr);
+#endif
 	
 	// Clean temp data for security reasons
 	Xl = 0;
@@ -468,9 +503,19 @@ void Blowfish_Init(BLOWFISH_CTX *ctx, unsigned char *key, int keyLen) {
 		j = j + 1;
 		if (j >= keyLen)
 			j = 0;
+#ifdef TRACE
+		printf("Init 1: i=%d\tk=%d\tj=%d\tdata=%08lX\tkey[%d]=%08lX\n", i, k, j, data, j, key[j]);
+#endif
 		}
 		ctx->P[i] = ORIG_P[i] ^ data;
+#ifdef TRACE
+		printf("Init 1: ctx->P[%d] = %08lX\n\n", i, ctx->P[i]);
+#endif
 	}
+	
+#ifdef TRACE
+	  printf("\n");
+#endif
 
 	datal = 0x00000000;
 	datar = 0x00000000;
@@ -480,7 +525,15 @@ void Blowfish_Init(BLOWFISH_CTX *ctx, unsigned char *key, int keyLen) {
 		Blowfish_Encrypt(ctx, &datal, &datar);
 		ctx->P[i] = datal;
 		ctx->P[i + 1] = datar;
+#ifdef TRACE
+		printf("Init 2: ctx->P[%d] = %08lX\n", i, ctx->P[i]);
+		printf("Init 2: ctx->P[%d] = %08lX\n", i+1, ctx->P[i+1]);
+#endif
 	}
+	
+#ifdef TRACE
+	printf("\n");
+#endif
 
 	for (i = 0; i < 4; ++i) 
 	{
@@ -488,9 +541,16 @@ void Blowfish_Init(BLOWFISH_CTX *ctx, unsigned char *key, int keyLen) {
 		Blowfish_Encrypt(ctx, &datal, &datar);
 		ctx->S[i][j] = datal;
 		ctx->S[i][j + 1] = datar;
+#ifdef TRACE
+		printf("Init 3: ctx->S[%d][%d] = %08lX\n", i, j, ctx->S[i][j]);
+		printf("Init 3: ctx->S[%d][%d] = %08lX\n", i, j+1, ctx->S[i][j+1]);
+#endif
 		}
 	}
-	
+
+#ifdef TRACE
+	printf("\n");
+#endif
 	
 	// Clean temp data for security reasons
 	i = 0;
@@ -512,9 +572,17 @@ void Blowfish_Init(BLOWFISH_CTX *ctx, unsigned char *key, int keyLen) {
 uint64_t BlowfishEncryption(BLOWFISH_CTX *ctx, uint64_t x)
 {
 	uint32_t L = (x>>32);
-	uint32_t R = (uint32_t)(x & 0x0000FFFF);
+	uint32_t R = (uint32_t)(x & 0xFFFFFFFF);
+	
+#ifdef TRACE
+	printf("\nEnc_64: x=%08llX\tL=%08lX\tR=%08lX\n", x, L, R);
+#endif
 	
 	Blowfish_Encrypt(ctx, &L, &R);
+
+#ifdef TRACE
+	printf("Enc_64: return=%08llX\n", ((uint64_t)L<<32) | R);
+#endif
 	
 	return ((uint64_t)L<<32) | R;
 }
@@ -530,9 +598,17 @@ uint64_t BlowfishEncryption(BLOWFISH_CTX *ctx, uint64_t x)
 uint64_t BlowfishDecryption(BLOWFISH_CTX *ctx, uint64_t x)
 {
 	uint32_t L = (x>>32);
-	uint32_t R = (uint32_t)(x & 0x0000FFFF);
+	uint32_t R = (uint32_t)(x & 0xFFFFFFFF);
+	
+#ifdef TRACE
+	printf("\nDec_64: x=%08llX\tL=%08lX\tR=%08lX\n", x, L, R);
+#endif
 	
 	Blowfish_Decrypt(ctx, &L, &R);
+	
+#ifdef TRACE
+	printf("Dec_64: return=%08llX\n", ((uint64_t)L<<32) | R);
+#endif
 	
 	return ((uint64_t)L<<32) | R;
 }

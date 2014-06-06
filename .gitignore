@@ -26,3 +26,6 @@
 *.kdev4
 
 *.directory
+
+build/*
+test/*
