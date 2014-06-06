@@ -18,6 +18,9 @@ int max_threads;
 int *thread_args;
 long int input_file_length;
 long int block_size;
+int frame_number;
+int frame_size;
+const int frame_threshold = 700000;
 
 FILE *input_file;
 FILE *output_file;
@@ -27,6 +30,8 @@ BLOWFISH_CTX *ctx;
 pthread_mutex_t read_mutex;
 pthread_mutex_t write_mutex;
 
+
+inline void compute_frame_parameters(void);
 
 /**
  * @brief Blowfish thread function
@@ -38,32 +43,40 @@ void *Blowfish_thread(void *args)
 	int block_number = *((int *)args);
 	long int base = block_size * block_number;
 	long int offset = 0;
+	int intra_frame_counter = 0;
 	
-	uint64_t in_data = 0;
-	uint64_t out_data = 0;
+	uint64_t *buffer = (uint64_t *)calloc(frame_size, 1);
 	
-	for(offset = 0; offset<block_size; offset += 8)
+	for(offset = 0; offset<block_size; offset += frame_size)
 	{
 		pthread_mutex_lock(&read_mutex);
 			fseek(input_file, base+offset, SEEK_SET);
-			fread(&in_data, 1, 8, input_file);
-#ifdef DEBUG
-			printf("Thread read: base=%d\toffset=%d\tin_data=%08llX\n", base, offset, in_data);
-#endif
+			fread(buffer, frame_size, 1, input_file);
 		pthread_mutex_unlock(&read_mutex);
 		
-		if(mode == 'e')
+		
+		for(intra_frame_counter = 0; intra_frame_counter < (frame_size/sizeof(uint64_t)); ++intra_frame_counter)
 		{
-			out_data = BlowfishEncryption(ctx, in_data);
+#ifdef DEBUG
+			printf("Thread input: base=%d\toffset=%d\tintra_frame_counter=%d\tbuffer[%d]=%08llX\n", base, offset, intra_frame_counter, intra_frame_counter, buffer[intra_frame_counter]);
+#endif
+			if(mode == 'e')
+			{
+				buffer[intra_frame_counter] = BlowfishEncryption(ctx, buffer[intra_frame_counter]);
+			}
+			else
+			{
+				buffer[intra_frame_counter] = BlowfishDecryption(ctx, buffer[intra_frame_counter]);
+			}
+#ifdef DEBUG
+			printf("Thread output: base=%d\toffset=%d\tintra_frame_counter=%d\tbuffer[%d]=%08llX\n", base, offset, intra_frame_counter, intra_frame_counter, buffer[intra_frame_counter]);
+#endif
 		}
-		else
-		{
-			out_data = BlowfishDecryption(ctx, in_data);
-		}
+		
 		
 		pthread_mutex_lock(&write_mutex);
 			fseek(output_file, base+offset, SEEK_SET);
-			fwrite(&out_data, 1, 8, output_file);
+			fwrite(buffer, frame_size, 1, output_file);
 			if(ferror(output_file))
 			{
 				perror("Writing error\n");
@@ -72,8 +85,8 @@ void *Blowfish_thread(void *args)
 		pthread_mutex_unlock(&write_mutex);
 	}
 	
-	in_data = 0;
-	out_data = 0;
+	buffer = (uint64_t *) memset(buffer, 0, frame_size);
+	free(buffer);
 	pthread_exit(NULL);
 }
 
@@ -184,7 +197,6 @@ int main(int argc, char **argv)
 		perror("Input file is too short\n");
 		exit(EXIT_FAILURE);
 	}
-
 	
 	block_size = input_file_length / max_threads;
 	if(0 != (block_size%8))
@@ -195,6 +207,8 @@ int main(int argc, char **argv)
 	long int reminder_size = input_file_length - (block_size * max_threads);
 	long int reminder_size_alligned = reminder_size - (reminder_size%8);
 	int padding_size = 8 - (reminder_size%8);
+	
+	compute_frame_parameters();
 	
 #ifdef DEBUG
 		printf("Block subdivision: input_file_length=%d\tblock_size=%d\nreminder_size=%d\treminder_size_alligned=%d\tpadding_size=%d\n\n", input_file_length, block_size, reminder_size, reminder_size_alligned, padding_size);
@@ -358,7 +372,7 @@ int main(int argc, char **argv)
 	pthread_mutex_destroy(&read_mutex);
 	pthread_mutex_destroy(&write_mutex);
 	
-	ctx = memset(ctx, 0, sizeof(BLOWFISH_CTX));
+	ctx = (BLOWFISH_CTX *) memset(ctx, 0, sizeof(BLOWFISH_CTX));
 	in_data_rem = 0;
 	out_data_rem = 0;
 	input_file_length = 0;
@@ -366,6 +380,8 @@ int main(int argc, char **argv)
 	block_size = 0;
 	reminder_size = 0;
 	reminder_size_alligned = 0;
+	frame_number = 0;
+	frame_size = 0;
 	
 	fcloseall();	// Close all files
 	
@@ -378,6 +394,23 @@ int main(int argc, char **argv)
 }
 
 
-
+/**
+ * @brief Compute optimal frame number and size
+ */
+inline void compute_frame_parameters(void)
+{
+	frame_size = block_size;
+	frame_number = 1;
+	
+	if(frame_size < frame_threshold)
+	{
+		return;
+	}
+	
+	for(frame_number = 8; frame_size < frame_threshold; frame_number+=8)
+	{
+		frame_size = block_size / frame_number;	// Maintain frame_size multiple of 8 (block_size already is)
+	}
+}
 
 
