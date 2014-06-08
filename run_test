@@ -1,0 +1,52 @@
+#!/bin/sh
+#set -xv
+
+# WARNING: diff fail in case of final new line in input file
+
+BUILD_DIR=./build
+TEST_DIR=./test
+
+KEY="0000000000000000"
+MAX_THREADS=1
+DEBUG=0
+
+EXECUTABLE=$BUILD_DIR/blowfish-multithread
+INPUT=$TEST_DIR/test_input
+ENC_OUTPUT=$TEST_DIR/enc_output
+DEC_OUTPUT=$TEST_DIR/dec_output
+
+ENC_LOGFILE=$TEST_DIR/enc.log
+DEC_LOGFILE=$TEST_DIR/dec.log
+
+
+
+if [ "$DEBUG" == "1" ]; then
+	EXECUTABLE="gdb --args $EXECUTABLE"
+fi
+
+
+echo "clean"
+if [ -a "$ENC_OUTPUT" ]; then
+	rm "$ENC_OUTPUT"
+fi
+
+if [ -a "$DEC_OUTPUT" ]; then
+	rm "$DEC_OUTPUT"
+fi
+
+echo "encrypt"
+$EXECUTABLE "e" "$INPUT" "$KEY" "$ENC_OUTPUT" "$MAX_THREADS" #> "$ENC_LOGFILE"
+
+echo "decrypt"
+$EXECUTABLE "d" "$ENC_OUTPUT" "$KEY" "$DEC_OUTPUT" "$MAX_THREADS" #> "$DEC_LOGFILE"
+
+echo "comparing"
+if diff -B -b -E -Z "$INPUT" "$DEC_OUTPUT" >/dev/null ; then
+	echo -e "\e[00;32mOK\e[00m"
+else
+	echo -e "\e[00;31mDifferent\e[00m"
+fi
+
+
+
+

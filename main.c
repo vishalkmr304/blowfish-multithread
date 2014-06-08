@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <time.h>
-#include <unistd.h>	// for truncate()
+#include <unistd.h>	// for syscalls
 #include <string.h>	// for memset()
 #include "blowfish.h"
 #include "debug.h"
@@ -20,7 +20,7 @@ long int input_file_length;
 long int block_size;
 int frame_number;
 int frame_size;
-const int frame_threshold = 700000;
+const int frame_threshold = 7000000;
 
 FILE *input_file;
 FILE *output_file;
