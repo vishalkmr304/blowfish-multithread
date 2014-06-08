@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <time.h>
 #include <unistd.h>	// for syscalls
+#include <time.h>
 #include <string.h>	// for memset()
 #include "blowfish.h"
 #include "debug.h"
@@ -20,7 +21,7 @@ long int input_file_length;
 long int block_size;
 int frame_number;
 int frame_size;
-const int frame_threshold = 7000000;
+const int frame_threshold = 2000000;
 
 FILE *input_file;
 FILE *output_file;
@@ -91,6 +92,14 @@ void *Blowfish_thread(void *args)
 }
 
 
+#ifdef BENCHMARK
+int64_t timespecDiff(struct timespec *timeA_p, struct timespec *timeB_p)
+{
+  return ((timeA_p->tv_sec * 1000000000) + timeA_p->tv_nsec) -
+           ((timeB_p->tv_sec * 1000000000) + timeB_p->tv_nsec);
+}
+#endif
+
 
 /**
  * @brief Usage: blowfish-multithread (e|d) input_filename key output_filename max_threads
@@ -159,7 +168,9 @@ int main(int argc, char **argv)
 	
 
 #ifdef BENCHMARK
-	clock_t start = clock();
+	struct timespec start, end;
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
 #endif	
 	
 	
@@ -352,10 +363,10 @@ int main(int argc, char **argv)
 	
 	
 	
-#ifdef BENCHMARK
-	clock_t stop = clock();
-	unsigned long milliseconds = (stop - start) * 1000 / CLOCKS_PER_SEC;
-	printf("Elapsed time: %lu ms.\n\n", milliseconds);
+#ifdef BENCHMARK	
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	double timeElapsed = (double)timespecDiff(&end, &start);
+	printf("Elapsed time: %f seconds.\n", timeElapsed/1000000000);
 #endif
 	
 	

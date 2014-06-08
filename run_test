@@ -11,7 +11,7 @@ MAX_THREADS=1
 DEBUG=0
 
 EXECUTABLE=$BUILD_DIR/blowfish-multithread
-INPUT=$TEST_DIR/test_input
+INPUT=$TEST_DIR/debian.iso
 ENC_OUTPUT=$TEST_DIR/enc_output
 DEC_OUTPUT=$TEST_DIR/dec_output
 
@@ -36,9 +36,11 @@ fi
 
 echo "encrypt"
 $EXECUTABLE "e" "$INPUT" "$KEY" "$ENC_OUTPUT" "$MAX_THREADS" #> "$ENC_LOGFILE"
+echo ""
 
 echo "decrypt"
 $EXECUTABLE "d" "$ENC_OUTPUT" "$KEY" "$DEC_OUTPUT" "$MAX_THREADS" #> "$DEC_LOGFILE"
+echo ""
 
 echo "comparing"
 if diff -B -b -E -Z "$INPUT" "$DEC_OUTPUT" >/dev/null ; then
