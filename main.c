@@ -19,8 +19,8 @@ int max_threads;
 int *thread_args;
 long int input_file_length;
 long int block_size;
-int frame_number;
-int frame_size;
+long int frame_number;
+long int frame_size;
 const int frame_threshold = 2000000;
 
 FILE *input_file;
@@ -47,6 +47,11 @@ void *Blowfish_thread(void *args)
 	int intra_frame_counter = 0;
 	
 	uint64_t *buffer = (uint64_t *)calloc(frame_size, 1);
+	if(buffer == NULL)
+	{
+		perror("Failed to allocate buffer, exiting");
+		exit(EXIT_FAILURE);
+	}
 	
 	for(offset = 0; offset<block_size; offset += frame_size)
 	{
