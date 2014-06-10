@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <time.h>
-#include <unistd.h>	// for syscalls
+#include <unistd.h>
 #include <time.h>
 #include <string.h>	// for memset()
 #include "blowfish.h"
@@ -14,39 +14,53 @@
 
 
 
-char mode;
-int max_threads;
-int *thread_args;
-long int input_file_length;
-long int block_size;
-long int frame_number;
-long int frame_size;
-const int frame_threshold = 2000000;
+char mode;					//! Mode flag for Enc/Dec.
+int max_threads;			//! Thread number to be used.
+int *thread_args;			//! Threads argument array.
+							//! Composed of one entry per thread in which the thread number is stored, the reference to the entry will be passed to the thread. Ex: {0,1,2,3,4,5,6,7} 
+							
+long int input_file_length;	//! Input file length in bytes.
+long int block_size;		//! Block size in bytes.
+							//! The input file is divided in blocks, one per thread, this is always a multiple of the Blowfish's block size (8 bytes), the remaining bytes will be handled by the main thread.
+							
+long int frame_number;		//! Number of frames per block.
+							//! Each block is subdivided in frames which will be buffered in RAM to gain betteer performances.
+							//! This is always a multiple of 8, so that the resulting frame size is alligned to the Blowfish's block size (8 bytes).
+							
+long int frame_size;		//! Frame size in bytes.
+							//! This is always a multiple of 8.
+							
+const int frame_threshold = 2000000;	//! Maximum size of a frame.
 
-FILE *input_file;
-FILE *output_file;
+FILE *input_file;	//! Input file descriptor.
+FILE *output_file;	//! Output file descriptor.
 
-BLOWFISH_CTX *ctx;
+BLOWFISH_CTX *ctx;	//! Context for the Blowfish algorithm generated using the provided key.
 
-pthread_mutex_t read_mutex;
-pthread_mutex_t write_mutex;
+pthread_mutex_t read_mutex;		//! Mutex to protect frame reading
+								//! There is the need of protection even if the frames are non-overlapping because the file cursor is only one and global, so the fseek() calls would interfere with each others.
+								
+pthread_mutex_t write_mutex;	//! Mutex to protect frame writing
+								//! There is the need of protection even if the frames are non-overlapping because the file cursor is only one and global, so the fseek() calls would interfere with each others.
 
 
 inline void compute_frame_parameters(void);
+inline void compute_block_size(void);
 
 /**
  * @brief Blowfish thread function
+ * Each thread work on its own block, divided in frames. Frames are loaded in RAM one at a time, once loaded each frame is "(enc|dec)rypted" considering 64 bits per iteration (Blowfish's block size), then the frame is written out to the output file and the next frame is loaded.
  * 
- * @param args Block number
+ * @param args Thread number, which correspond also to block number.
  */
 void *Blowfish_thread(void *args)
 {
-	int block_number = *((int *)args);
-	long int base = block_size * block_number;
-	long int offset = 0;
-	int intra_frame_counter = 0;
+	int block_number = *((int *)args);			//! Block number on which the thread will work.
+	long int base = block_size * block_number;	//! Base address of the block.
+	long int offset = 0;						//! Frame offset within the block.
+	int intra_frame_counter = 0;				//! Current Blowfish's block within the frame.
 	
-	uint64_t *buffer = (uint64_t *)calloc(frame_size, 1);
+	uint64_t *buffer = (uint64_t *)calloc(frame_size, 1);	//! Buffer to temporary store the frame.
 	if(buffer == NULL)
 	{
 		perror("Failed to allocate buffer, exiting");
@@ -55,12 +69,19 @@ void *Blowfish_thread(void *args)
 	
 	for(offset = 0; offset<block_size; offset += frame_size)
 	{
+		///////////////////////////////////////////////
+		// Read the frame and store it into the buffer
+		///////////////////////////////////////////////
 		pthread_mutex_lock(&read_mutex);
 			fseek(input_file, base+offset, SEEK_SET);
 			fread(buffer, frame_size, 1, input_file);
 		pthread_mutex_unlock(&read_mutex);
 		
 		
+		
+		///////////////////////////////////////////////
+		// Work on each Blowfish's block
+		///////////////////////////////////////////////
 		for(intra_frame_counter = 0; intra_frame_counter < (frame_size/sizeof(uint64_t)); ++intra_frame_counter)
 		{
 #ifdef DEBUG
@@ -80,6 +101,10 @@ void *Blowfish_thread(void *args)
 		}
 		
 		
+		
+		///////////////////////////////////////////////
+		// Write out the frame
+		///////////////////////////////////////////////
 		pthread_mutex_lock(&write_mutex);
 			fseek(output_file, base+offset, SEEK_SET);
 			fwrite(buffer, frame_size, 1, output_file);
@@ -91,13 +116,19 @@ void *Blowfish_thread(void *args)
 		pthread_mutex_unlock(&write_mutex);
 	}
 	
-	buffer = (uint64_t *) memset(buffer, 0, frame_size);
+	buffer = (uint64_t *) memset(buffer, 0, frame_size);	//! For security reasons overwrite memory before exiting
 	free(buffer);
 	pthread_exit(NULL);
 }
 
 
 #ifdef BENCHMARK
+/**
+ * @brief Perform the difference between two time instant expressed with the timespec structure.
+ * 
+ * @param timeA_p Time instant A.
+ * @param timeB_p Time instant B.
+ */
 int64_t timespecDiff(struct timespec *timeA_p, struct timespec *timeB_p)
 {
   return ((timeA_p->tv_sec * 1000000000) + timeA_p->tv_nsec) -
@@ -175,7 +206,6 @@ int main(int argc, char **argv)
 #ifdef BENCHMARK
 	struct timespec start, end;
 	clock_gettime(CLOCK_MONOTONIC, &start);
-
 #endif	
 	
 	
@@ -183,7 +213,7 @@ int main(int argc, char **argv)
 	// Key reading
 	///////////////////////////////////////////////////////////////////////
 	
-	int key_length = strlen(key);	// Go back to the beginning
+	int key_length = strlen(key);
 	
 	if((key_length<4) || (key_length>56))
 	{
@@ -193,7 +223,8 @@ int main(int argc, char **argv)
 	}
 	
 	ctx = (BLOWFISH_CTX *) malloc(sizeof(BLOWFISH_CTX));
-	Blowfish_Init(ctx, key, key_length);
+	Blowfish_Init(ctx, key, key_length);	// Create Blowfish's context for the session.
+	
 	//TODO: Test if could be usefull perform this step in a separate thread
 	
 	
@@ -214,15 +245,11 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	
-	block_size = input_file_length / max_threads;
-	if(0 != (block_size%8))
-	{
-		// Make the block size multiple of 64 bits
-		block_size -= (block_size%8);
-	}
-	long int reminder_size = input_file_length - (block_size * max_threads);
-	long int reminder_size_alligned = reminder_size - (reminder_size%8);
-	int padding_size = 8 - (reminder_size%8);
+	compute_block_size();
+	
+	long int reminder_size = input_file_length - (block_size * max_threads);	//! Reminder size in bytes, which in turn may be not multiple of 64 bits (8 bytes).
+	long int reminder_size_alligned = reminder_size - (reminder_size%8);		//! Reminder size multiple of 64 bits, the remaining bytes will be padded.
+	int padding_size = 8 - (reminder_size%8);									//! Padding size in bytes, if the reminder size is already alligned the padding will be 64 bits (added anyway) to be consistent with the protocol.
 	
 	compute_frame_parameters();
 	
@@ -237,7 +264,6 @@ int main(int argc, char **argv)
 	// Thread creation
 	///////////////////////////////////////////////////////////////////////
 	
-	//pthread_t thread_pool[max_threads];
 	pthread_t *thread_pool = (pthread_t *) malloc(max_threads * sizeof(pthread_t));
 	thread_args = (int *) malloc(max_threads * sizeof(int));
 	pthread_mutex_init(&read_mutex, NULL);
@@ -428,5 +454,20 @@ inline void compute_frame_parameters(void)
 		frame_size = block_size / frame_number;	// Maintain frame_size multiple of 8 (block_size already is)
 	}
 }
+
+
+/**
+ * @brief Compute block size to distribute the load among threads
+ */
+inline void compute_block_size(void)
+{
+	block_size = input_file_length / max_threads;	// Distribute equally the load to the threads.
+	if(0 != (block_size%8))
+	{
+		// Make the block size multiple of 64 bits, the main thread will take care of the reminder.
+		block_size -= (block_size%8);
+	}
+}
+
 
 
