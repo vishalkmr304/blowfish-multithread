@@ -116,7 +116,7 @@ void *Blowfish_thread(void *args)
 		pthread_mutex_unlock(&write_mutex);
 	}
 	
-	buffer = (uint64_t *) memset(buffer, 0, frame_size);	//! For security reasons overwrite memory before exiting
+	buffer = (uint64_t *) memset(buffer, 0, frame_size);	// For security reasons overwrite memory before exiting
 	free(buffer);
 	pthread_exit(NULL);
 }
@@ -205,7 +205,7 @@ int main(int argc, char **argv)
 
 #ifdef BENCHMARK
 	struct timespec start, end;
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	clock_gettime(CLOCK_MONOTONIC, &start);	// Start here to measure the execution time
 #endif	
 	
 	
@@ -264,7 +264,7 @@ int main(int argc, char **argv)
 	// Thread creation
 	///////////////////////////////////////////////////////////////////////
 	
-	pthread_t *thread_pool = (pthread_t *) malloc(max_threads * sizeof(pthread_t));
+	pthread_t *thread_pool = (pthread_t *) malloc(max_threads * sizeof(pthread_t));	//! This array will contains all the threads that will be created.
 	thread_args = (int *) malloc(max_threads * sizeof(int));
 	pthread_mutex_init(&read_mutex, NULL);
 	pthread_mutex_init(&write_mutex, NULL);
@@ -272,6 +272,10 @@ int main(int argc, char **argv)
 	int i = 0;
 	for(i = 0; i < max_threads; ++i)
 	{
+		/**
+		 * Initialize the threads arguments vector that will be used to pass the thread number to each thread (that is also the block number on which the thread will work)
+		 * {0,1,2,3,4,5,6,7,...,max_threads-1}
+		 */
 		thread_args[i] = i;
 	}
 	
@@ -292,9 +296,9 @@ int main(int argc, char **argv)
 	///////////////////////////////////////////////////////////////////////
 	// Reminder
 	///////////////////////////////////////////////////////////////////////
-	long int base_rem = block_size * max_threads;
-	uint64_t in_data_rem = 0;
-	uint64_t out_data_rem = 0;
+	long int base_rem = block_size * max_threads;	//! Base address of the reminder.
+	uint64_t in_data_rem = 0;						//! Blwowfish's block read from input file.
+	uint64_t out_data_rem = 0;						//! Blwowfish's block written to output file.
 	
 	for(i = 0; i<reminder_size_alligned; i += 8)
 	{
@@ -333,7 +337,7 @@ int main(int argc, char **argv)
 	int j = 0;
 	for(j = 0; j < max_threads; ++j)
 	{
-		pthread_join(thread_pool[j], NULL);
+		pthread_join(thread_pool[j], NULL);	// Wait all the thread to finish their work before proceeding.
 	}
 	
 	
@@ -341,10 +345,19 @@ int main(int argc, char **argv)
 	///////////////////////////////////////////////////////////////////////
 	// Padding
 	///////////////////////////////////////////////////////////////////////
+	/**
+	 * The padding is added to complete the last Blowfish's block and make it 8 bytes long.
+	 * The convention is to pad with the number of remaining bytes to reach 8 so that while decrypting it is possible to distinguish the padding from the user data.
+	 * For example: XXXXX333 or XXXX4444 or XXXXXX22
+	 * If the reminder size is already multiple of 8 the padding will be added anyway and will be a block of 8s: 88888888.
+	 * This is necessary to be consistent with the convention and be able to distinguish the padding from the user data and correctly decrypt the file.
+	 * If we don't add this last block of 8s, while decrypting, we have no means to know if there is a padding or not, this means that the padding is always present, its minumum length is 1 and the maximum is 8.
+	 * Given the last property of the protocol the decryption is easy, it is sufficient to read the very last byte to know the padding length (if the padding was allowed to be of zero length this would be not possible) and trim the file to the right length.
+	 */
 	if(mode == 'e')
 	{
-		fseek(input_file, base_rem+i, SEEK_SET);
-		fread(&in_data_rem, reminder_size-reminder_size_alligned, 1, input_file);
+		fseek(input_file, base_rem+i, SEEK_SET);	// Go to the end of the alligned reminder
+		fread(&in_data_rem, reminder_size-reminder_size_alligned, 1, input_file);	// Read the last bytes to be padded
 		
 #ifdef TRACE
 		printf("Padding_enc: in_data_rem=%08llX\n", in_data_rem);
@@ -352,7 +365,7 @@ int main(int argc, char **argv)
 		
 		for(j = reminder_size-reminder_size_alligned; j < 8; ++j)
 		{
-			in_data_rem = in_data_rem & ~( (uint64_t)(0xFF) << 8*j);
+			in_data_rem = in_data_rem & ~( (uint64_t)(0xFF) << 8*j);	// Clear the bytes to be padded with a "walking zeros" mask: 0xFFFFFFFFFFFFFF00
 #ifdef TRACE
 			printf("Padding_enc: in_data_rem=%08llX\tj+1=%d\t~( (0xFF) << 8*j)=%08llX\n", in_data_rem, j+1, ~( (uint64_t)(0xFF) << 8*j));
 #endif
@@ -360,13 +373,13 @@ int main(int argc, char **argv)
 		
 		for(j = reminder_size-reminder_size_alligned; j < 8; ++j)
 		{
-			in_data_rem = in_data_rem | ( ((uint64_t)padding_size) << 8*j);
+			in_data_rem = in_data_rem | ( ((uint64_t)padding_size) << 8*j);	// Write the padding
 #ifdef TRACE
 			printf("Padding_enc: in_data_rem=%08llX\tj+1=%d\t((uint64_t)padding_size) << 8*(j+1))=%08llX\n", in_data_rem, j+1, ((uint64_t)padding_size) << 8*(j+1));
 #endif
 		}
 		
-		out_data_rem = BlowfishEncryption(ctx, in_data_rem);
+		out_data_rem = BlowfishEncryption(ctx, in_data_rem);	// Encrypt the last padded block
 		
 		fseek(output_file, base_rem+i, SEEK_SET);
 		fwrite(&out_data_rem, 1, 8, output_file);
@@ -378,13 +391,13 @@ int main(int argc, char **argv)
 	}
 	else
 	{
-		// Last 8 bytes already decrypted  along with the padding which have to be trimmed, its length is written as padding data (at most 8 byte)
+		// Last 8 bytes already decrypted  along with the padding which have to be trimmed, its length is written as padding data (at most 8 byte).
 		fseek(output_file, input_file_length-1, SEEK_SET);
 		fread(&out_data_rem, 1, 1, output_file);
 		
-		unsigned int trim_len = out_data_rem & (uint64_t)0xFF;
-		fclose(output_file);
-		truncate(output_filename, input_file_length-trim_len);
+		unsigned int trim_len = out_data_rem & (uint64_t)0xFF;	//! Number of bytes to be trimmed from the decrypted file to cut out the padding.
+		fclose(output_file);	// The truncate() function work on closed files. (There is also the couterpart ftruncate() that take the open file descriptor, but during the test it failed)
+		truncate(output_filename, input_file_length-trim_len);	// Trim the file to a specific length.
 #ifdef DEBUG
 		printf("Trimming: out_data_rem=%08lX\tinput_file_length-trim_len=%d\n", out_data_rem, input_file_length-trim_len);
 #endif
@@ -395,9 +408,9 @@ int main(int argc, char **argv)
 	
 	
 #ifdef BENCHMARK	
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	double timeElapsed = (double)timespecDiff(&end, &start);
-	printf("Elapsed time: %f seconds.\n", timeElapsed/1000000000);
+	clock_gettime(CLOCK_MONOTONIC, &end);	// Stop to measure the execution time.
+	double timeElapsed = (double)timespecDiff(&end, &start);		// Compute the elapsed time.
+	printf("Elapsed time: %f seconds.\n", timeElapsed/1000000000);	// Print the elapsed time.
 #endif
 	
 	
@@ -414,6 +427,7 @@ int main(int argc, char **argv)
 	pthread_mutex_destroy(&read_mutex);
 	pthread_mutex_destroy(&write_mutex);
 	
+	// For security reasons overwrite memory before exiting
 	ctx = (BLOWFISH_CTX *) memset(ctx, 0, sizeof(BLOWFISH_CTX));
 	in_data_rem = 0;
 	out_data_rem = 0;
@@ -446,7 +460,7 @@ inline void compute_frame_parameters(void)
 	
 	if(frame_size < frame_threshold)
 	{
-		return;
+		return;	// Frame size already within the limit, no need to reduce it.
 	}
 	
 	for(frame_number = 8; frame_size < frame_threshold; frame_number+=8)
