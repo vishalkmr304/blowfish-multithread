@@ -25,7 +25,7 @@ long int block_size;		//! Block size in bytes.
 							
 long int frame_number;		//! Number of frames per block.
 							//! Each block is subdivided in frames which will be buffered in RAM to gain betteer performances.
-							//! This is always a multiple of 8, so that the resulting frame size is alligned to the Blowfish's block size (8 bytes).
+							//! This is always a multiple of 8, so that the resulting frame size is aligned to the Blowfish's block size (8 bytes).
 							
 long int frame_size;		//! Frame size in bytes.
 							//! This is always a multiple of 8.
@@ -248,13 +248,13 @@ int main(int argc, char **argv)
 	compute_block_size();
 	
 	long int reminder_size = input_file_length - (block_size * max_threads);	//! Reminder size in bytes, which in turn may be not multiple of 64 bits (8 bytes).
-	long int reminder_size_alligned = reminder_size - (reminder_size%8);		//! Reminder size multiple of 64 bits, the remaining bytes will be padded.
-	int padding_size = 8 - (reminder_size%8);									//! Padding size in bytes, if the reminder size is already alligned the padding will be 64 bits (added anyway) to be consistent with the protocol.
+	long int reminder_size_aligned = reminder_size - (reminder_size%8);			//! Reminder size multiple of 64 bits, the remaining bytes will be padded.
+	int padding_size = 8 - (reminder_size%8);									//! Padding size in bytes, if the reminder size is already aligned the padding will be 64 bits (added anyway) to be consistent with the protocol.
 	
 	compute_frame_parameters();
 	
 #ifdef DEBUG
-		printf("Block subdivision: input_file_length=%d\tblock_size=%d\nreminder_size=%d\treminder_size_alligned=%d\tpadding_size=%d\n\n", input_file_length, block_size, reminder_size, reminder_size_alligned, padding_size);
+		printf("Block subdivision: input_file_length=%d\tblock_size=%d\nreminder_size=%d\treminder_size_aligned=%d\tpadding_size=%d\n\n", input_file_length, block_size, reminder_size, reminder_size_aligned, padding_size);
 #endif
 	
 	
@@ -300,7 +300,7 @@ int main(int argc, char **argv)
 	uint64_t in_data_rem = 0;						//! Blwowfish's block read from input file.
 	uint64_t out_data_rem = 0;						//! Blwowfish's block written to output file.
 	
-	for(i = 0; i<reminder_size_alligned; i += 8)
+	for(i = 0; i<reminder_size_aligned; i += 8)
 	{
 		pthread_mutex_lock(&read_mutex);
 			fseek(input_file, base_rem+i, SEEK_SET);
@@ -356,14 +356,14 @@ int main(int argc, char **argv)
 	 */
 	if(mode == 'e')
 	{
-		fseek(input_file, base_rem+i, SEEK_SET);	// Go to the end of the alligned reminder
-		fread(&in_data_rem, reminder_size-reminder_size_alligned, 1, input_file);	// Read the last bytes to be padded
+		fseek(input_file, base_rem+i, SEEK_SET);	// Go to the end of the aligned reminder
+		fread(&in_data_rem, reminder_size-reminder_size_aligned, 1, input_file);	// Read the last bytes to be padded
 		
 #ifdef TRACE
 		printf("Padding_enc: in_data_rem=%08llX\n", in_data_rem);
 #endif
 		
-		for(j = reminder_size-reminder_size_alligned; j < 8; ++j)
+		for(j = reminder_size-reminder_size_aligned; j < 8; ++j)
 		{
 			in_data_rem = in_data_rem & ~( (uint64_t)(0xFF) << 8*j);	// Clear the bytes to be padded with a "walking zeros" mask: 0xFFFFFFFFFFFFFF00
 #ifdef TRACE
@@ -371,7 +371,7 @@ int main(int argc, char **argv)
 #endif
 		}
 		
-		for(j = reminder_size-reminder_size_alligned; j < 8; ++j)
+		for(j = reminder_size-reminder_size_aligned; j < 8; ++j)
 		{
 			in_data_rem = in_data_rem | ( ((uint64_t)padding_size) << 8*j);	// Write the padding
 #ifdef TRACE
@@ -435,7 +435,7 @@ int main(int argc, char **argv)
 	key_length = 0;
 	block_size = 0;
 	reminder_size = 0;
-	reminder_size_alligned = 0;
+	reminder_size_aligned = 0;
 	frame_number = 0;
 	frame_size = 0;
 	
