@@ -1,0 +1,45 @@
+ 
+\chapter{Architecture} \label{architecture}
+\input{Architecture}
+
+
+\section{Architecture}
+
+\subsection{Place {\&} Route} 
+
+\paragraph{Instruction fetch}
+
+\subparagraph{ALU}
+
+
+
+\begin{figure}[H]
+\centering
+\includegraphics[scale = 0.8]{./Pictures/4-stateACS_block} % x compreso tra 0 e 1
+\caption{4-state Add-compare-select block}
+\label{fig:4ACS_unit}
+\end{figure}
+
+
+
+\begin{center}
+\begin{lstlisting}
+
+<code>
+
+\end{lstlisting}
+\end{center}
+
+
+\begin{scripting}
+\begin{verbatim}
+
+<code>
+
+\end{verbatim}
+\end{scripting}
+
+
+\begin{itemize}
+\item Signals declaration
+\end{itemize}

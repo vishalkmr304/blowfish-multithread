@@ -1,0 +1,122 @@
+\section{Software interface}
+The software interface is the following:
+\begin{itemize}
+\item A character, 'e' or 'd', to select the \textit{\textbf{e}ncryption} mode or the \textit{\textbf{d}ecryption} mode
+\item The input file name
+\item The key (from 4 to 56 characters without spaces)
+\item The output file name
+\item The number of threads to use to parallelize the work
+\end{itemize}
+
+
+\section{Preliminary setup}
+At the very beginning the CLI arguments are read and stored in the respective variables, then checked for errors, like the number of arguments, the  provided mode flag being either 'e' or 'd' and not another character, the key length, etc...\\
+The input file (if exists) is opened, the output one is created and the Blowfish context is created in the \textbf{ctx} variable of type \emph{BLOWFISH\_CTX}.\\
+
+\subsection{Parameter computing}
+Subsequently the input file is subdivided in blocks (after reading its length). The block size is determined dividing the file length by the number of threads and then adjusting it to be multiple of eight.\\
+After this the reminder size is computed according to this formula:
+
+\begin{scripting}
+\begin{verbatim}
+reminder size = input file length - (block size * max threads)
+\end{verbatim}
+\end{scripting}
+
+But we still have to take out the last 64 bits block to be padded, so we compute the effective reminder size (called \emph{aligned}):
+
+\begin{scripting}
+\begin{verbatim}
+reminder size aligned = reminder size - (reminder size % 8)
+\end{verbatim}
+\end{scripting}
+
+At this point it's easy to obtain the padding size:
+
+\begin{scripting}
+\begin{verbatim}
+padding size = 8 - (reminder size % 8)
+\end{verbatim}
+\end{scripting}
+
+Note that this last formula is sufficient to be consistent with the protocol explained earlier, if the reminder size is already aligned there is no need of padding but the protocol requires an entire byte of padding, this is the behavior that come naturally from the formula.\\
+At this point the frames number and size are computed, the algorithm starts with one frame and an initial frame size equal to the block size. If the frame size is smaller than the threshold we finish here. On the contrary, if the size is greater than the threshold we increment the frames number to eight and compute the frame size:
+
+\begin{center}
+\begin{lstlisting}
+for(frame_number = 8; frame_size < frame_threshold; frame_number+=8)
+{
+	frame_size = block_size / frame_number;
+}
+\end{lstlisting}
+\end{center}
+
+We keep looping (and dividing) until the frame size is lower than the threshold.
+
+
+\subsection{Thread creation}
+Here the thread pool is created and the read and write mutex (explained later) initialized.\\
+Since the thread creation function takes only a pointer to the argument to be passed to the thread function and the only information needed to be passed as argument is the block number on which to work we create an array initialized with numbers from zero to the threads number minus one (0,1,2,3,4,5,6,7,...,max threads-1). Then the reference to each element of the array is passed to the thread, this allows to generalize to any number of threads.\\
+After the initialization of the array the threads are created, if there is an error during the thread creation a message is printed on \textbf{stderr} and the program terminates with failure.
+
+
+\section{Thread implementation}
+As first step each thread reads the block number on which works on from the argument, then with this computes the base address of the block:
+
+\begin{scripting}
+\begin{verbatim}
+base = block size * block number
+\end{verbatim}
+\end{scripting}
+
+The buffer big as a frame is allocated.\\
+The algorithm is composed of two nested loops, the outermost range over every frame of the block, the innermost range over each 64 bits block of the frame encrypt/decrypt it.\\
+When we land on a new frame we first read it from the hard disk into the buffer. This is done  by means of the \emph{fseek()} and \emph{fread()} functions. The first set the file cursor on the current frame, the second read it and store it into the buffer. Since these the cursor is only one per file we have to protect these two consecutive operations with a mutex so that the reading operation cannot be interrupted by another thread which changes the cursor position.\\
+Even though a process can open a file multiple times, would be counterproductive to read multiple frames simultaneously because mechanical hard disks performs a lot better doing sequential I/O operations (this is the reason that made framing necessary), and switching from a frame to another before finishing the current could nullify the advantages of the buffering.\\
+Once the frame buffering is finished we enter the innermost loop which takes each 64 bits block, encrypt/decrypt it according to the mode flag and write back the result into the buffer.\\
+When the frame is completely managed we write the buffer into the output file and check for errors in the writing procedure.\\
+Then we clean up the memory and terminate the thread.
+
+\section{Reminder and padding}
+While the new created threads works on the blocks, the main thread proceed to work on the reminder, the algorithm is basically the same as the thread's one except that, since the reminder is very small, there is no need of buffering. But still there is the need of protecting the readings and writings with the mutex.\\
+Once the reminder (except the padding) is handled the main thread waits for the other threads to terminate with the syscall \emph{pthread\_join()}.\\
+Then the main (and now only) thread can proceed with the padding, this operation unlike the rest differ significantly in case of encryption or decryption.
+
+\subsection{Encryption padding} 
+In case of encryption we first read the last bytes (now there is only one thread, so there is no need of mutex protection), then we clear the bytes to be padded and after that we write the actual padding by means of an OR operation of a suitably shifted value (the padding size as explained earlier).\\
+Now that also the last 64 bits block is complete we can encrypt it and then write it into the output file.
+
+\subsection{Decryption padding} 
+In case of decryption at this point we have already decrypted the last 64 bits block containing the padding and wrote it into the output file. So it is sufficient to move the file cursor one byte back and read the padding length (the protocol explained earlier guarantee that the last byte is always the padding length), once we know the padding length it is easy to trim the file to the right length using the \emph{truncate()} syscall.
+
+
+
+\section{Benchmark}
+The benchmark is based on the \emph{clock\_gettime()} syscall, it stores the current time (with very high resolution) into a variable of type \emph{struct timespec} which is defined in this way:
+
+\begin{center}
+\begin{lstlisting}
+struct timespec 
+{
+        time_t   tv_sec;        /* seconds */
+        long     tv_nsec;       /* nanoseconds */
+};
+\end{lstlisting}
+\end{center}
+
+Using two variables: \textbf{start} and \textbf{end}, the first set at the beginning and the second at the end, and a function to compute the difference, it is possible to measure the execution time of the program.
+
+\begin{center}
+\begin{lstlisting}
+int64_t timespecDiff(struct timespec *timeA_p, struct timespec *timeB_p)
+{
+  return ((timeA_p->tv_sec * 1000000000) + timeA_p->tv_nsec) -
+           ((timeB_p->tv_sec * 1000000000) + timeB_p->tv_nsec);
+}
+\end{lstlisting}
+\end{center}
+
+The benchmark sections are enclosed into \emph{\#ifdef BENCHMARK} blocks in order to make easy to enable or disable it by simply defining or not the symbol \emph{BENCHMARK}.
+
+\section{Memory cleaning}
+Before exiting and before terminating the threads all the memory is freed but only after writing zeros in all the variables and data structures used, like the threads buffer, the blowfish's context, etc. This avoids to leave traces in RAM after the execution that may allow an attacker to find the key.

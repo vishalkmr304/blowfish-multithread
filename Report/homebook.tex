@@ -1,0 +1,168 @@
+\documentclass[12pt,  english, makeidx, a4paper, titlepage, oneside]{book}
+\usepackage{babel}
+\usepackage{fancyhdr}
+\usepackage{fancyvrb}
+\usepackage{makeidx}
+\usepackage{titlesec}
+\usepackage{listings} 
+\usepackage{color}
+\usepackage{hyperref}
+%\hypersetup{colorlinks=true,linkcolor=red}
+\usepackage{mathtools}
+\usepackage{psfrag}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{subfig}
+\usepackage[tight,italian]{minitoc}
+\usepackage{epigraph}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage{lettrine}
+\usepackage{varwidth}
+
+\usepackage{alltt}
+\usepackage{xcolor}
+
+
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstset{
+  language=C,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\footnotesize\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+}
+
+\newenvironment{scripting}
+{\begin{list}{}{\setlength{\leftmargin}{1em}}\item\scriptsize\bfseries}
+{\end{list}}
+
+\newenvironment{listato}{\footnotesize}
+                        {\normalsize }
+
+
+%\pagestyle{empty}
+
+%\textwidth 15.5cm
+\textheight 23cm
+\topmargin -1cm
+%\oddsidemargin -0.5cm
+\linespread{1.1}
+
+\pagestyle{fancy}
+\lhead{}
+\chead{Operating Systems}
+\lfoot{}
+\cfoot{}
+\rfoot{}
+\rhead{\thepage}
+
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{float}
+%\oddsidemargin -1.1cm
+
+\titleformat{\chapter}[display]
+{\normalfont\Large\filcenter\sffamily}
+{\titlerule[0.5pt]%
+\vspace{1pt}
+\titlerule
+\vspace{1pc}
+\LARGE\MakeUppercase{\chaptertitlename} \thechapter
+}
+{1pc}
+{\titlerule
+\vspace{1pc}
+\Huge}
+
+\graphicspath{{Pictures/}}
+
+\newcommand{\SubSubSection}[1]{\subsubsection{\bf Exercise   ~#1}}
+
+\newcommand{\homework}[1]{\subsubsection{\bf Homework   ~#1}}
+
+\newcommand{\Solution}{\subsubsection{\bf Solution}}
+
+\makeindex
+\begin{document}
+	\frontmatter
+	\begin{titlepage}
+		\vspace{2cm}
+		\centerline{
+		\includegraphics[width=2cm]{./Pictures/logopoli}}
+		\smallskip
+		\centerline{\LARGE Politecnico di Torino}
+		\bigskip
+		\centerline{\Large III Facolt\`a di Ingegneria}
+		\vspace{4cm}
+		\centerline{\Huge\sf Multi-thread Blowfish algorithm implementation}
+		\bigskip
+		\centerline{\Large\bfseries\sf Operating Systems}
+		\vspace{3cm}
+		\centerline{\Large Master degree in Electronic Engineering}
+		\vspace{4.4cm}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% AUTHORS
+% Change the name of the Group participants here
+%
+\begin{center}
+\textbf{	Renzi Alessandro 197783}
+\end{center}						
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		\vspace{1cm}
+		\centerline{\small\today}
+	\end{titlepage}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%content
+	\tableofcontents
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+	\mainmatter
+	\lstset{language=C}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\chapter{Introduction} \label{introduction}
+\input{Introduction}
+
+
+\chapter{Blowfish} \label{blowfish}
+\input{Blowfish}
+
+\chapter{Multi-threading} \label{multi-threading}
+\input{Multi-threading}
+
+\chapter{Buffering} \label{buffering}
+\input{Buffering}
+
+\chapter{Implementation} \label{implementation}
+\input{Implementation}
+
+\chapter{Benchmark} \label{benchmark}
+\input{Benchmark}
+
+
+\end{document}
