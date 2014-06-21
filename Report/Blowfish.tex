@@ -30,7 +30,7 @@ void Blowfish_Decrypt(BLOWFISH_CTX *ctx, uint32_t *xl, uint32_t *xr);
 \end{lstlisting}
 \end{center}
 
-The first has to be executed at the beginning, before encrypting or decrypting, it initialize the Blowfish context (like the S-boxes) using the provided key. This context structure will have to be passed to the encryption/decryption function along with the 64 bits block.\\
+The first has to be executed at the beginning, before encrypting or decrypting, it initializes the Blowfish context (like the S-boxes) using the provided key. This context structure will have to be passed to the encryption/decryption function along with the 64 bits block.\\
 The block has to be passed as a pointer to the two halves associated to the two branch of the Feistel cipher, therefore the data passed to the functions is overwritten by the functions themselves. But the fact that the 64 bits block has to be split is an internal implementation detail which the user of the algorithm doesn't care and should be hidden. So I decided to implement two wrappers which take as arguments only the context and the whole 64 bits block, moreover the block is passed by value and the result is returned, in order to give the programmer the freedom to choose if overwrite the input value or not.
 
 \begin{center}
