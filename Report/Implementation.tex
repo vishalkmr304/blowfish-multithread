@@ -120,3 +120,9 @@ The benchmark sections are enclosed into \emph{\#ifdef BENCHMARK} blocks in orde
 
 \section{Memory cleaning}
 Before exiting and before terminating the threads all the memory is freed but only after writing zeros in all the variables and data structures used, like the threads buffer, the blowfish's context, etc. This avoids to leave traces in RAM after the execution that may allow an attacker to find the key.
+
+
+\section{Public repository}
+This implementation is open source and published on GitHub under MIT license at the following address:\\
+
+\url{https://github.com/snow4life/blowfish-multithread}

@@ -32,7 +32,7 @@ The results are the following:
 \end{figure}
 
 As we can see, apart for an anomaly in the first test due to the fact that the file was really too small for such an high number of threads, the algorithm scales very well and can handle well also very big files.\\
-Doubling the number of threads lead to a speedup which range from 1.4 to 1.82.
+Doubling the number of threads lead to a speedup which range from 1.4 to 1.82, but obviously if we exceed the CPU native parallelism the speedup saturates.
 
 \subparagraph{Script}
 The test script is the following:
